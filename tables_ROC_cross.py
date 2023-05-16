@@ -11,6 +11,13 @@ extraLabel = '{}_t0.1'.format(extraLabel)
 niter = 5
 nfold = 4
 
+log_units = True
+normalized = False
+if normalized:
+    extraLabel = '{}_norm'.format(extraLabel)
+if log_units:
+    extraLabel = '{}_log10'.format(extraLabel)
+
 KMs = [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1], [2, 2], [1, 4], [4, 1]]
 extraLabel = '{}_limit4'.format(extraLabel)
 
@@ -28,7 +35,6 @@ d2['sens_test'] =  d2['num_true_pos_test'] / d2['num_pos_test']
 d2['spec_test'] =  d2['num_true_neg_test'] / d2['num_neg_test']
 
 drugs = np.unique(d2['drug'])
-# drugs = ['Vemurafenib']
 
 saveTable = True
 
@@ -102,7 +108,7 @@ for drug in drugs:
 
     best_vector_indices_trainval = []
     best_vector_forms_trainval = set()
-    KMs_opt = np.zeros((niter, 2), dtype=np.int)
+    KMs_opt = np.zeros((niter, 2), dtype=int)
     for iiter in range(1, niter+1):
 
         ## ---- Find optimal hyper parameters
@@ -138,13 +144,13 @@ for drug in drugs:
                 max_vectors_train = get_best_formulae(
                     dd['sens_train'].to_numpy(), dd['spec_train'].to_numpy(),
                     (dd['len']).to_numpy())
-                max_vector_indices = np.array(max_vectors_train)[:, -1].astype(np.int).tolist()
+                max_vector_indices = np.array(max_vectors_train)[:, -1].astype(int).tolist()
 
                 max_vectors_val = get_best_formulae(
                     dd.iloc[max_vector_indices]['sens_val'].to_numpy(),
                     dd.iloc[max_vector_indices]['spec_val'].to_numpy(),
                     (dd.iloc[max_vector_indices]['len']).to_numpy())
-                max_vector_val_indices = np.array(max_vectors_val)[:, -1].astype(np.int).tolist()
+                max_vector_val_indices = np.array(max_vectors_val)[:, -1].astype(int).tolist()
 
                 # 3) calculate ROC & AUC for validation data
                 yy_val  = calc_ROC(xx, max_vectors_val)
@@ -195,7 +201,7 @@ for drug in drugs:
         max_vectors_trainval = get_best_formulae(
             dd['sens_trainval'].to_numpy(), dd['spec_trainval'].to_numpy(),
             (dd['len']).to_numpy())
-        max_vector_indices = np.array(max_vectors_trainval)[:, -1].astype(np.int).tolist()
+        max_vector_indices = np.array(max_vectors_trainval)[:, -1].astype(int).tolist()
 
         # store line index of all "best" formula based on train+val
         best_vector_indices_trainval.extend(dd.index[max_vector_indices].to_numpy())
@@ -206,7 +212,7 @@ for drug in drugs:
             dd.iloc[max_vector_indices]['spec_test'].to_numpy(),
             dd.iloc[max_vector_indices]['len'].to_numpy())
         max_vector_test_indices = np.array(max_vector_indices)[
-            np.array(max_vectors_test)[:, -1].astype(np.int).tolist()]
+            np.array(max_vectors_test)[:, -1].astype(int).tolist()]
 
         # 7) calculate ROC for train & test data
         yy_trainval[iiter-1, :]  = calc_ROC(xx, max_vectors_trainval)

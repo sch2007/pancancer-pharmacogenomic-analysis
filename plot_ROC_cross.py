@@ -20,6 +20,13 @@ extraLabel = '{}_t0.1'.format(extraLabel)
 niter = 5
 nfold = 4
 
+log_units = True
+normalized = False
+if normalized:
+    extraLabel = '{}_norm'.format(extraLabel)
+if log_units:
+    extraLabel = '{}_log10'.format(extraLabel)
+
 KMs = [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1], [2, 2], [1, 4], [4, 1]]
 extraLabel = '{}_limit4'.format(extraLabel)
 
@@ -94,6 +101,9 @@ def get_AUC(xx, yy):
     return np.trapz(yy, xx)
 
 for drug in drugs:
+
+    #if drug != 'Vemurafenib':
+    #    continue
 
     plt.figure(figsize=(7, 7))
 

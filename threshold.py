@@ -11,7 +11,7 @@ import scipy.optimize
 
 plt.ion()
 
-scipy.random.seed(1)
+np.random.seed(1)
 
 # all cell lines for which we have genetic data => for LOBICO analysis
 drugFilename = 'Supplementary Table 5 LOBICO data for paper.xlsx'
@@ -19,14 +19,20 @@ drugFilename = 'Supplementary Table 5 LOBICO data for paper.xlsx'
 # all cell lines for which we have AUC values & limits => for threshold
 AUC_filename = 'AUC_upper_lower_bounds.xlsx'
 
-saveFigure = False
-saveTable = False
+saveFigure = True
+saveTable = True
 fontsize = 14
 N_upsample = 1000
 t = 0.1
 log_units = True
+normalized = False
 
 extraLabel = '_t{}'.format(t)
+
+if normalized:
+    extraLabel = '{}_norm'.format(extraLabel)
+if log_units:
+    extraLabel = '{}_log10'.format(extraLabel)
 
 AUC = pd.read_excel(AUC_filename, sheet_name='AUC', index_col=0)
 AUC_upper = pd.read_excel(AUC_filename, sheet_name='AUC_upper', index_col=0)
@@ -40,12 +46,6 @@ print(f'cell lines = {cell_lines}')
 
 panel_structure = (3, 2)
 n_panels = panel_structure[0] * panel_structure[1]
-
-if log_units:
-    trans = np.log10
-    extraLabel = '{}_log10'.format(extraLabel)
-else:
-    trans = lambda x: x
 
 if saveTable:
     outfile = open('AUC{}.csv'.format(extraLabel), 'w')
@@ -62,11 +62,17 @@ for idrug, drug in enumerate(drugs):
 
     dd = pd.read_excel(drugFilename, sheet_name=drug)
 
-    Samples = dd['Cell']
+    transN = lambda x: x
+    if normalized:
+        transN = lambda x: x / dd[drug].max()
+    transL = lambda x: x
     if log_units:
-        AUCval = dd['log']
-    else:
-        AUCval = dd[drug]
+        transL = lambda x: np.log10(x)
+    trans = lambda x: transL(transN(x))
+
+    Samples = dd['Cell']
+    AUCval = trans(dd[drug])
+
     numFeatures = dd.shape[1] - 3
     MM = dd.iloc[:, 3:-1].to_numpy()
     missing = np.zeros(len(Samples), dtype=bool)
@@ -82,8 +88,11 @@ for idrug, drug in enumerate(drugs):
             squeeze=True)
         plt.subplots_adjust(wspace=0.3, hspace=0.25)
         ifig += 1
+        for axis in axes.flatten():
+            axis.axis('off')
 
     plt.subplot(panel_structure[0], panel_structure[1], 1 + idrug % n_panels)
+    plt.gca().axis('on')
 
     num_cell_lines = np.sum(~np.isnan(AUC.loc[drug, :]))
 
@@ -102,8 +111,8 @@ for idrug, drug in enumerate(drugs):
         # check that AUC values a consistent for cell lines that are both
         # in drugFile and in AUC_file
         if len(np.where(Samples == cell_line)[0]):
-            assert np.isclose(AUC.loc[drug, cell_line],
-                              10**AUCval[np.where(Samples == cell_line)[0][0]])
+            assert np.isclose(trans(AUC.loc[drug, cell_line]),
+                              AUCval[np.where(Samples == cell_line)[0][0]])
 
         mean = trans(AUC.loc[drug, cell_line])
         lower = trans(AUC_lower.loc[drug, cell_line])
@@ -220,23 +229,30 @@ for idrug, drug in enumerate(drugs):
     numSensitive = np.sum(AUCval < b)
     numResistant = np.sum(AUCval >=b)
     if saveTable:
-        outfile.write('"{}", {}, {:.3f}, {:.3f}, {:.3f}, {:.3f}\n'.format(
+        outfile.write('"{}", {}, {:.5f}, {:.3f}, {:.3f}, {:.3f}\n'.format(
                       drug, num_cell_lines, b, mu, Sigma, theta))
         outfile2.write('{}, {:d}, {:d}, {:d}, {:d}, {:d}, {:d}, {:d}\n'.format(
                       drug, numFeatures,
                       num_cell_lines, num_pos_cell_lines, num_neg_cell_lines,
                       num_avail_cell_lines, numSensitive, numResistant))
 
+    xlabel = 'AUC'
+    if normalized:
+        xlabel = f'{xlabel} [norm.]'
     if log_units:
-        plt.xlabel('lg AUC [ mg h / l ]', fontsize=fontsize-1)
-    else:
-        plt.xlabel('AUC [ mg h / l ]', fontsize=fontsize-1)
-    plt.ylabel('pdf', fontsize=fontsize-1)
+        xlabel = rf'$\log_{{10}}$ {xlabel}'
+    plt.xlabel(xlabel, fontsize=fontsize-1)
+
+    plt.ylabel('probability density', fontsize=fontsize-1)
+    plt.xticks(fontsize=fontsize-2)
+    plt.yticks(fontsize=fontsize-2)
+
+    plt.tight_layout()
 
     plt.text(0.03, 0.97, '{} ({} cell lines)'.format(drug, num_cell_lines),
              fontsize=fontsize, verticalalignment='top',
              horizontalalignment='left', transform=plt.gca().transAxes)
-    plt.text(0.03, 0.82, 'b={:.5g}'.format(b),
+    plt.text(0.03, 0.82, 'b={:.4f}'.format(b),
              fontsize=fontsize, verticalalignment='top',
              horizontalalignment='left', transform=plt.gca().transAxes)
 

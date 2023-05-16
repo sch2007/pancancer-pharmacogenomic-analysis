@@ -39,6 +39,14 @@ def calc_weights_formula(formula, weights={}):
 
 extraLabel = ''
 extraLabel = '{}_t0.1'.format(extraLabel)
+
+log_units = True
+normalized = False
+if normalized:
+    extraLabel = '{}_norm'.format(extraLabel)
+if log_units:
+    extraLabel = '{}_log10'.format(extraLabel)
+
 extraLabel = '{}_limit4'.format(extraLabel)
 
 d = pd.read_csv('ROC_formulae_test{}.csv'.format(extraLabel))
@@ -53,7 +61,7 @@ if saveTable:
     outfile.write('Drug,num_formula,gene,weight\n')
 
 for drug in drugs:
-    
+
     print('---- {} ----'.format(drug))
     sel = d['Drug'] == drug
     weights = {}

@@ -1,5 +1,5 @@
-function [Samples,Features,lgAUC,MutationMatrix] = parsexls2(file, sheet, col_lgAUC, col_Mut)
-% col is the col-th data column containing lgAUC but 
+function [Samples,Features,AUC,MutationMatrix] = parsexls2(file, sheet, col_AUC, col_Mut)
+% col is the col-th data column containing AUC but 
 % excluding the cell-line column 
 
 %% read in cls file
@@ -10,7 +10,7 @@ function [Samples,Features,lgAUC,MutationMatrix] = parsexls2(file, sheet, col_lg
 Samples = txt(2:end,1);
 
 % read log AUC values
-lgAUC = num(:,col_lgAUC);
+AUC = num(:,col_AUC);
 
 % read mutation matrix
 MutationMatrix = num(:,col_Mut:end);

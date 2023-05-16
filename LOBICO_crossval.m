@@ -1,8 +1,8 @@
 %% Initialize
-% DO NOT FORGET to addpath the LOBICO directory or the code will not run
+% replace Init with addpath to the LOBICO directory
 Init
 
-disp('*** Running LOBICO ***');
+disp('***** Running LOBICO *****');
 extraLabel = '';
 
 drugList = {'Afatinib','Buparlisib','Cobimetinib','Crizotinib',...
@@ -10,11 +10,25 @@ drugList = {'Afatinib','Buparlisib','Cobimetinib','Crizotinib',...
             'Apitolisib', 'Ganetespib', 'Gedatolisib', 'LY2603618',...
             'Lapatinib', 'Sapanisertib', 'Paclitaxel', 'Temsirolimus',...
             'Trametinib', 'Vemurafenib', 'Vorinostat'};
-% drugList = {'Trametinib'};
 
 drugFilename = 'Supplementary Table 5 LOBICO data for paper.xlsx';
-thresholdFilename = 'AUC_t0.1_log10.csv';
+
 extraLabel = sprintf('%s_t0.1', extraLabel);
+
+verbosity = 1;  % 0..no output, 1..minimal output, 2..full output
+
+% -- default --
+log_units = true;
+normalized = false;
+
+if normalized
+    extraLabel = sprintf('%s_norm', extraLabel);
+end
+if log_units
+    extraLabel = sprintf('%s_log10', extraLabel);
+end
+thresholdFilename = sprintf('AUC%s.csv', extraLabel);
+disp(sprintf('* AUC: log10 = %d, normalized = %d', log_units, normalized))
 
 %% Logic model complexity
 
@@ -55,9 +69,12 @@ fprintf(outfile2, "drug,cell_lines,genes,lg_thresh,niter,iiter,clauses,literals,
 
 %% Outer loop over drugs (completely independent for each drug)
 for iDrug = 1:length(drugList)
-
+    
     drug = drugList{iDrug};
-    drugSheet = drug;
+    
+    if verbosity > 0
+        disp(sprintf('**** Drug %s ****', drug));
+    end   
 
     for iidrug = 1:length(thresholdData{1})
         drug2 = strrep(thresholdData{1}{iidrug}, '"', '');
@@ -65,40 +82,57 @@ for iDrug = 1:length(drugList)
            th = thresholdData{3}(iidrug);
         end
     end
+    if verbosity > 0
+        disp(sprintf('* Binarization threshold %g *', th));
+    end
 
     %% Load data
-    [Samples,Features,lgAUCs, MutationMatrix] = ...
-        parsexls2(drugFilename, drugSheet, 2, 3);
-    disp(sprintf('**** Drug %s ****', drug));
+    [Samples, Features, AUCs, MutationMatrix] = ...
+        parsexls2(drugFilename, drug, 1, 3);
+    
+    if normalized
+        AUCs = AUCs / max(AUCs);
+    end
+    if log_units
+        AUCs = log10(AUCs);
+    end
 
     % remove cell-lines that do not have complete set of gene features
     missing_list = [];
     for iSample = 1:length(Samples)
-        if any(ismissing(MutationMatrix(iSample, :)) | ismissing(lgAUCs(iSample)))
+        if any(ismissing(MutationMatrix(iSample, :)) | ismissing(AUCs(iSample)))
             missing_list = [missing_list, iSample];
         end
     end
     MutationMatrix(missing_list, :) = [];
     Samples(missing_list) = [];
-    lgAUCs(missing_list) = [];
-    disp(sprintf('* # cell lines = %d *', length(Samples)))
-    disp(sprintf('* # gene features = %d *', length(Features)))
+    AUCs(missing_list) = [];
+    if verbosity > 0
+        disp(sprintf('* # cell lines = %d *', length(Samples)))
+        disp(sprintf('* # gene features = %d *', length(Features)))
+    end
 
     %% Cross validation
-    rng(1);
-    [testing_indicess, trainval_indicess] = balanced_crossval(length(Samples), niter, lgAUCs < th);
+    rng(1); % so that cross-validation can be reproduced
+    [testing_indicess, trainval_indicess] = balanced_crossval(length(Samples), niter, AUCs < th);
     for iiter = 1:niter  % cross-validation for training-test split
+        if verbosity > 0
+            disp(sprintf('* CV iteration: %d / %d', iiter, niter))
+        end
+        
         testing_indices = testing_indicess{iiter};
         trainval_indices = trainval_indicess{iiter};
 
-        [validation_indicess, training_indicess] = balanced_crossval(length(trainval_indices), nfold, lgAUCs(trainval_indices) < th);
+        [validation_indicess, training_indicess] = balanced_crossval(length(trainval_indices), nfold, AUCs(trainval_indices) < th);
 
         for iKM = 1:length(KMs)  % model complexity
 
             K = KMs(iKM, 1);
             M = KMs(iKM, 2);
-
-            disp(sprintf('K (#clauses) = %d, M (#literals) = %d', K, M));
+            
+            if verbosity > 1
+                disp(sprintf('K (#clauses) = %d, M (#literals) = %d', K, M));
+            end
 
             min_specs = 0:d_spec:1;
             for ispec = 1:length(min_specs)
@@ -107,8 +141,10 @@ for iDrug = 1:length(drugList)
                 min_senss = (1-min_spec):d_sens:1;
                 for isens = 1:length(min_senss)
                     min_sens = min_senss(isens);
-                    disp(sprintf('* Minimum sensitivity = %g *', min_sens));
-                    disp(sprintf('* Minimum specificity = %g *', min_spec));
+                    if verbosity > 1
+                        disp(sprintf('* Minimum sensitivity = %g *', min_sens));
+                        disp(sprintf('* Minimum specificity = %g *', min_spec));
+                    end
 
                     for ifold = 1:nfold  % splitting training into training/validation
                         validation_indices = trainval_indices(validation_indicess{ifold});
@@ -121,9 +157,8 @@ for iDrug = 1:length(drugList)
                         [N,P] = size(X);
 
                         %binarization threshold th
-                        disp(sprintf('* Binarization threshold lg AUC = %g *', th));
-                        Y = double(lgAUCs(training_indices)<th);
-                        W = abs(lgAUCs(training_indices)-th);
+                        Y = double(AUCs(training_indices)<th);
+                        W = abs(AUCs(training_indices)-th);
 
                         %class weights
                         FPW = 1;                  %Total weight on positive class (Y==1)
@@ -154,7 +189,6 @@ for iDrug = 1:length(drugList)
                         end
 
                         %% Check solution
-                        display('***********************');
                         %inferred formula
                         x = round(sol.Solution.x);
                         SolMat = getsolution(x,K,M,P);
@@ -164,13 +198,16 @@ for iDrug = 1:length(drugList)
                         else
                             str = strtrim(str);
                         end
-                        disp('Inferred logic model');
-                        disp(str);
-                        display('***********************');
+                        if verbosity > 1
+                            disp('***********************');
+                            disp('Inferred logic model');
+                            disp(str);
+                            disp('***********************');
+                        end
 
                         %% Apply model to training data
                         X_train = MutationMatrix(training_indices, :);
-                        Y_train = double(lgAUCs(training_indices)<th);
+                        Y_train = double(AUCs(training_indices)<th);
 
                         %apply the trained model to the data
                         Y_train_pred = applymodel(x, X_train, K, M, P);
@@ -185,7 +222,7 @@ for iDrug = 1:length(drugList)
 
                         %% Apply model to validation data
                         X_val = MutationMatrix(validation_indices, :);
-                        Y_val = double(lgAUCs(validation_indices)<th);
+                        Y_val = double(AUCs(validation_indices)<th);
 
                         %apply the trained model to the data
                         Y_val_pred = applymodel(x, X_val, K, M, P);
@@ -214,9 +251,8 @@ for iDrug = 1:length(drugList)
                     [N,P] = size(X);
 
                     %binarization threshold th
-                    disp(sprintf('* Binarization threshold lg AUC = %g *', th));
-                    Y = double(lgAUCs(trainval_indices)<th);
-                    W = abs(lgAUCs(trainval_indices)-th);
+                    Y = double(AUCs(trainval_indices)<th);
+                    W = abs(AUCs(trainval_indices)-th);
 
                     %class weights
                     FPW = 1;                  %Total weight on positive class (Y==1)
@@ -247,7 +283,6 @@ for iDrug = 1:length(drugList)
                     end
 
                     %% Check solution
-                    display('***********************');
                     %inferred formula
                     x = round(sol.Solution.x);
                     SolMat = getsolution(x,K,M,P);
@@ -257,13 +292,16 @@ for iDrug = 1:length(drugList)
                     else
                         str = strtrim(str);
                     end
-                    disp('Inferred logic model');
-                    disp(str);
-                    display('***********************');
+                    if verbosity > 1
+                        disp('***********************');
+                        disp('Inferred logic model');
+                        disp(str);
+                        disp('***********************');
+                    end
 
                     %% Apply model to training+validation data
                     X_trainval = MutationMatrix(trainval_indices, :);
-                    Y_trainval = double(lgAUCs(trainval_indices)<th);
+                    Y_trainval = double(AUCs(trainval_indices)<th);
 
                     %apply the trained model to the data
                     Y_trainval_pred = applymodel(x, X_trainval, K, M, P);
@@ -278,7 +316,7 @@ for iDrug = 1:length(drugList)
 
                     %% Apply model to test data
                     X_test = MutationMatrix(testing_indices, :);
-                    Y_test = double(lgAUCs(testing_indices)<th);
+                    Y_test = double(AUCs(testing_indices)<th);
 
                     %apply the trained model to the data
                     Y_pred = applymodel(x, X_test, K, M, P);

@@ -10,6 +10,14 @@ fontsize=10.5
 equal_weight = True
 extraLabel = ''
 extraLabel = '{}_t0.1'.format(extraLabel)
+
+log_units = True
+normalized = False
+if normalized:
+    extraLabel = '{}_norm'.format(extraLabel)
+if log_units:
+    extraLabel = '{}_log10'.format(extraLabel)
+
 extraLabel = '{}_limit4'.format(extraLabel)
 if equal_weight:
     extraLabel = '{}_ew'.format(extraLabel)
